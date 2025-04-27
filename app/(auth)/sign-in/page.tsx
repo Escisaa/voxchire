@@ -1,13 +1,16 @@
 "use client";
 
+import { Suspense } from "react";
 import AuthForm from "@/components/AuthForm";
-import { useSearchParams } from "next/navigation";
 
-const Page = () => {
-  const searchParams = useSearchParams();
-  const returnTo = searchParams.get("return_to");
-
-  return <AuthForm type="sign-in" returnTo={returnTo} />;
+const SignInContent = () => {
+  return <AuthForm type="sign-in" />;
 };
 
-export default Page;
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignInContent />
+    </Suspense>
+  );
+}

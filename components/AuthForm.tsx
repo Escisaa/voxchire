@@ -6,7 +6,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { auth } from "@/firebase/client";
 import { useForm } from "react-hook-form";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import {
@@ -28,14 +28,10 @@ const authFormSchema = (type: FormType) => {
   });
 };
 
-const AuthForm = ({
-  type,
-  returnTo,
-}: {
-  type: FormType;
-  returnTo?: string | null;
-}) => {
+const AuthForm = ({ type }: { type: FormType }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("return_to");
 
   const formSchema = authFormSchema(type);
   const form = useForm<z.infer<typeof formSchema>>({
