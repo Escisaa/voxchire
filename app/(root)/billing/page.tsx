@@ -66,8 +66,9 @@ const BillingPage = () => {
     try {
       const userData = await getCurrentUser();
       if (!userData) {
-        // If no user data, redirect to sign-in
-        router.push("/sign-in");
+        // If no user data, redirect to sign-in with return path
+        const returnPath = encodeURIComponent("/billing");
+        router.push(`/sign-in?return_to=${returnPath}`);
         return null;
       }
       setUser(userData);
@@ -84,7 +85,19 @@ const BillingPage = () => {
 
   useEffect(() => {
     const success = searchParams.get("success");
+    const cancelled = searchParams.get("cancelled");
     const sessionId = searchParams.get("session_id");
+
+    // Clear URL parameters immediately to prevent double processing
+    if (success || cancelled) {
+      window.history.replaceState({}, "", "/billing");
+    }
+
+    // Handle cancellation only if coming from Stripe
+    if (cancelled === "true" && document.referrer.includes("stripe.com")) {
+      toast.info("Payment cancelled. You can try again when you're ready.");
+      return;
+    }
 
     // Only process if we have both success and sessionId parameters
     if (!success || !sessionId) return;
@@ -96,9 +109,6 @@ const BillingPage = () => {
       try {
         setIsProcessing(true);
         setProcessingPackage(null);
-
-        // Clear URL parameters immediately to prevent double processing
-        window.history.replaceState({}, "", "/billing");
 
         if (success === "true") {
           const result = await verifyAndProcessPayment(sessionId);

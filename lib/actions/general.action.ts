@@ -313,11 +313,17 @@ export async function createStripeCheckoutSession(
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?cancelled=true`,
       metadata: {
         userId,
       },
       client_reference_id: userId,
+      expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
+      custom_text: {
+        submit: {
+          message: "Your session will be preserved when you return",
+        },
+      },
     });
 
     return { url: checkoutSession.url };

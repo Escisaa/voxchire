@@ -28,7 +28,13 @@ const authFormSchema = (type: FormType) => {
   });
 };
 
-const AuthForm = ({ type }: { type: FormType }) => {
+const AuthForm = ({
+  type,
+  returnTo,
+}: {
+  type: FormType;
+  returnTo?: string | null;
+}) => {
   const router = useRouter();
 
   const formSchema = authFormSchema(type);
@@ -92,7 +98,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
         }
 
         toast.success(result.message);
-        router.push("/dashboard");
+        router.push(returnTo ? decodeURIComponent(returnTo) : "/dashboard");
       }
     } catch (error) {
       console.log(error);

@@ -20,9 +20,9 @@ const CompanyLogos = () => {
   const scrollingLogos = [...logos, ...logos, ...logos, ...logos];
 
   return (
-    <section className="py-4 mt-[-8rem] relative z-10">
+    <section className="py-4 mt-[-12rem] relative z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-lg text-gray-300 mb-4">
+        <p className="text-center text-lg text-gray-500 mb-4">
           Trusted by users at top companies
         </p>
         <div className="overflow-hidden relative w-full">
