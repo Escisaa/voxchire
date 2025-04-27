@@ -313,10 +313,11 @@ export async function createStripeCheckoutSession(
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?success=false`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing`,
       metadata: {
         userId,
       },
+      client_reference_id: userId,
     });
 
     return { url: checkoutSession.url };

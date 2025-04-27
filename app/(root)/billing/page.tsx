@@ -31,7 +31,7 @@ const creditPackages = [
   {
     name: "Unlimited 6M",
     credits: "Unlimited",
-    price: 39.99,
+    price: 49.99,
     features: [
       "Unlimited interviews",
       "Valid for 6 months",
@@ -42,7 +42,7 @@ const creditPackages = [
   {
     name: "Unlimited 1Y",
     credits: "Unlimited",
-    price: 69.99,
+    price: 89.99,
     features: [
       "Unlimited interviews",
       "Valid for 1 year",
@@ -63,10 +63,20 @@ const BillingPage = () => {
   const searchParams = useSearchParams();
 
   const fetchUser = useCallback(async () => {
-    const userData = await getCurrentUser();
-    setUser(userData);
-    return userData;
-  }, []);
+    try {
+      const userData = await getCurrentUser();
+      if (!userData) {
+        // If no user data, redirect to sign-in
+        router.push("/sign-in");
+        return null;
+      }
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      return null;
+    }
+  }, [router]);
 
   useEffect(() => {
     fetchUser();
@@ -106,8 +116,6 @@ const BillingPage = () => {
           } else {
             toast.error(result.error || "Failed to process payment");
           }
-        } else if (success === "false") {
-          toast.error("Payment cancelled or failed. Please try again.");
         }
       } catch (error) {
         console.error("Error processing payment:", error);
@@ -122,7 +130,11 @@ const BillingPage = () => {
   }, [searchParams, isProcessing, fetchUser]);
 
   const handlePurchase = async (priceId: string, packageName: string) => {
-    if (!user) return;
+    if (!user) {
+      toast.error("Please sign in to make a purchase");
+      router.push("/sign-in");
+      return;
+    }
     if (isProcessing) return; // Prevent multiple clicks while processing
 
     try {
@@ -136,8 +148,6 @@ const BillingPage = () => {
       }
 
       if (response.url) {
-        // Clear any existing URL parameters before redirecting
-        window.history.replaceState({}, "", "/billing");
         window.location.href = response.url;
       } else {
         toast.error("Failed to create checkout session. Please try again.");

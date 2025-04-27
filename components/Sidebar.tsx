@@ -31,22 +31,20 @@ const Sidebar = () => {
     // Initial fetch
     fetchUser();
 
-    // Set up an interval to periodically check for updates
-    const interval = setInterval(fetchUser, 5000); // Check every 5 seconds
-
-    // Fetch when the component gains focus
+    // Fetch when the component gains focus after returning from Stripe
     const handleFocus = () => {
-      fetchUser();
+      if (document.location.pathname.includes("/billing")) {
+        fetchUser();
+      }
     };
     window.addEventListener("focus", handleFocus);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
-  // Also fetch user data when pathname changes (e.g., after payment)
+  // Fetch user data when pathname changes (e.g., after payment or interview completion)
   useEffect(() => {
     const fetchUser = async () => {
       const userData = await getCurrentUser();

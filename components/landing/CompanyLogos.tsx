@@ -8,7 +8,6 @@ const CompanyLogos = () => {
     { src: "/comp.logos/Adobe_idLnet8cfu_1.png", alt: "Adobe" },
     { src: "/comp.logos/Meta_idlf4cVSsS_2.png", alt: "Meta" },
     { src: "/comp.logos/Amazon_Logo_2.webp", alt: "Amazon" },
-    { src: "/comp.logos/Ford.png", alt: "Ford", scale: 0.85 },
     { src: "/comp.logos/Airbnb_Logo_1.png", alt: "Airbnb" },
     {
       src: "/comp.logos/Rivian_Logo_Alternative_1.png",
@@ -21,9 +20,9 @@ const CompanyLogos = () => {
   const scrollingLogos = [...logos, ...logos, ...logos, ...logos];
 
   return (
-    <section className="py-4 mt-[-12rem] relative z-10">
+    <section className="py-4 mt-[-8rem] relative z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-lg text-gray-500 mb-4">
+        <p className="text-center text-lg text-gray-300 mb-4">
           Trusted by users at top companies
         </p>
         <div className="overflow-hidden relative w-full">
@@ -56,7 +55,6 @@ const CompanyLogos = () => {
                   style={{
                     objectFit: "contain",
                     filter: logo.invert ? "brightness(0) invert(1)" : "none",
-                    transform: logo.scale ? `scale(${logo.scale})` : "none",
                   }}
                   priority={index < logos.length}
                   sizes="(max-width: 768px) 80px, 120px"
