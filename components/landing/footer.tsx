@@ -11,18 +11,6 @@ const navigation = {
     { name: "Privacy Policy", href: "/privacy" },
     { name: "Terms of Service", href: "/terms" },
   ],
-  social: [
-    {
-      name: "Twitter",
-      href: "https://twitter.com/voxhire",
-      icon: Twitter,
-    },
-    {
-      name: "LinkedIn",
-      href: "https://linkedin.com/company/voxhire",
-      icon: Linkedin,
-    },
-  ],
 };
 
 export const Footer = () => {
@@ -41,20 +29,6 @@ export const Footer = () => {
             <p className="text-gray-400 text-sm max-w-xs">
               AI-powered interview practice for your next career move.
             </p>
-            <div className="flex space-x-4">
-              {navigation.social.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-[#14549d] transition-colors"
-                >
-                  <span className="sr-only">{item.name}</span>
-                  <item.icon className="h-5 w-5" />
-                </Link>
-              ))}
-            </div>
           </div>
 
           {/* Quick Links */}

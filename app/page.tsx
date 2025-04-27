@@ -9,6 +9,7 @@ import { Footer } from "@/components/landing/footer";
 import Navbar from "@/components/landing/navbar";
 import { Comparison } from "@/components/landing/comparison";
 import { Testimonials } from "@/components/landing/testimonials";
+import CompanyLogos from "@/components/landing/CompanyLogos";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function LandingPage() {
     <main>
       <Navbar onGetStartedClick={handleGetStarted} />
       <HeroSection onGetStartedClick={handleGetStarted} />
+      <CompanyLogos />
       <Features />
       <Comparison />
       <Testimonials />
