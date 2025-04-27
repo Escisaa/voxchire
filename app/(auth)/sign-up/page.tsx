@@ -1,7 +1,16 @@
+"use client";
+
+import { Suspense } from "react";
 import AuthForm from "@/components/AuthForm";
 
-const Page = () => {
+const SignUpContent = () => {
   return <AuthForm type="sign-up" />;
 };
 
-export default Page;
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignUpContent />
+    </Suspense>
+  );
+}
