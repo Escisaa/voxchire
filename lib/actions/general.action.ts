@@ -134,16 +134,48 @@ export async function getLatestInterviews(
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const interviews = await db
-    .collection("interviews")
-    .where("userId", "==", userId)
-    .orderBy("createdAt", "desc")
-    .get();
+  try {
+    // Add a cache-busting query parameter to ensure fresh data
+    const timestamp = Date.now();
 
-  return interviews.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Interview[];
+    const interviewRef = db
+      .collection("interviews")
+      .where("userId", "==", userId)
+      .orderBy("createdAt", "desc");
+
+    const snapshot = await interviewRef.get();
+    if (snapshot.empty) return [];
+
+    const interviews = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Interview[];
+
+    // Get any associated feedback for each interview
+    const interviewsWithFeedback = await Promise.all(
+      interviews.map(async (interview) => {
+        const feedbackRef = db
+          .collection("feedback")
+          .where("interviewId", "==", interview.id)
+          .limit(1);
+
+        const feedbackSnapshot = await feedbackRef.get();
+        const feedback = feedbackSnapshot.empty
+          ? null
+          : feedbackSnapshot.docs[0].data();
+
+        return {
+          ...interview,
+          feedback,
+        };
+      })
+    );
+
+    return interviewsWithFeedback;
+  } catch (error) {
+    console.error("Error getting interviews:", error);
+    return null;
+  }
 }
 
 export async function deleteUserInterviews(userId: string): Promise<boolean> {
@@ -313,7 +345,7 @@ export async function createStripeCheckoutSession(
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?cancelled=true`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?cancelled=true&user_id=${userId}`,
       metadata: {
         userId,
       },

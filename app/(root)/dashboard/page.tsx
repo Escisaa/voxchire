@@ -3,6 +3,9 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import { getInterviewsByUserId } from "@/lib/actions/general.action";
 import DashboardClient from "@/app/(root)/dashboard/DashboardClient";
 
+// Remove the revalidation setting to ensure fresh data on each visit
+// export const revalidate = 5;
+
 export default async function Home() {
   const user = await getCurrentUser();
 
@@ -10,6 +13,7 @@ export default async function Home() {
     redirect("/sign-in");
   }
 
+  // Force-fetch interviews to ensure the latest data
   const interviews = await getInterviewsByUserId(user.id);
   const hasPastInterviews = Boolean(interviews && interviews.length > 0);
 

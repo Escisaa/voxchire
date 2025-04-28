@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,43 +15,78 @@ import {
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { signOut } from "@/lib/actions/auth.action";
 
-const Sidebar = () => {
+const Sidebar = ({ onToggle }: { onToggle?: (collapsed: boolean) => void }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
+  // Fetch user data once on initial load and only refresh on focus events
+  // This significantly reduces the number of API calls
   useEffect(() => {
+    let isMounted = true;
+    let fetchInProgress = false;
+
     const fetchUser = async () => {
-      const userData = await getCurrentUser();
-      setUser(userData);
+      if (fetchInProgress) return; // Prevent multiple simultaneous fetches
+
+      try {
+        fetchInProgress = true;
+        const userData = await getCurrentUser();
+
+        // Only update state if component is still mounted
+        if (!isMounted) return;
+
+        // Don't overwrite existing user unless we have new data
+        if (userData) {
+          setUser(userData);
+        } else if (!user && window.location.pathname !== "/sign-in") {
+          // If we couldn't get user data and we're not already on the sign-in page
+          // Check localStorage for backup user ID from Stripe checkout
+          const storedUserId = localStorage.getItem("stripe_checkout_user_id");
+          if (storedUserId) {
+            // We had a user ID in localStorage, which suggests a session issue
+            // Redirect to sign-in with return path
+            localStorage.removeItem("stripe_checkout_user_id");
+            const returnPath = encodeURIComponent(window.location.pathname);
+            router.push(
+              `/sign-in?return_to=${returnPath}&session_expired=true`
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
+      } finally {
+        fetchInProgress = false;
+      }
     };
 
     // Initial fetch
     fetchUser();
 
-    // Fetch when the component gains focus after returning from Stripe
-    const handleFocus = () => {
-      if (document.location.pathname.includes("/billing")) {
-        fetchUser();
-      }
-    };
-    window.addEventListener("focus", handleFocus);
+    // Setup listeners for focus events only - removed pathname dependency
+    window.addEventListener("focus", fetchUser);
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      isMounted = false;
+      window.removeEventListener("focus", fetchUser);
     };
-  }, []);
+  }, [router, user]); // Removed pathname dependency
 
-  // Fetch user data when pathname changes (e.g., after payment or interview completion)
+  // Pre-fetch dashboard data on mount to make navigation instant
   useEffect(() => {
-    const fetchUser = async () => {
-      const userData = await getCurrentUser();
-      setUser(userData);
-    };
-    fetchUser();
-  }, [pathname]);
+    // Use prefetch to load route data in the background
+    router.prefetch("/dashboard");
+    router.prefetch("/billing");
+  }, [router]);
+
+  // Add effect to notify parent component of sidebar state changes
+  useEffect(() => {
+    if (onToggle) {
+      onToggle(isCollapsed);
+    }
+  }, [isCollapsed, onToggle]);
 
   const menuItems = [
     {
@@ -83,27 +118,67 @@ const Sidebar = () => {
     }
   };
 
-  const handleNavigation = (path: string) => {
-    setIsCollapsed(true);
-    router.push(path);
+  // Toggle sidebar function
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    // Also notify parent immediately
+    if (onToggle) {
+      onToggle(newState);
+    }
   };
+
+  // Optimize navigation by being more aggressive with prefetching
+  const handleNavigation = useCallback(
+    (path: string) => {
+      // Only trigger navigation if we're not already on this path
+      if (pathname !== path) {
+        // Pre-activate the route before actually navigating
+        // This makes navigation feel instant
+        document.body.style.cursor = "wait";
+
+        // Use setTimeout to allow the UI to update before navigation
+        // This creates a smoother visual transition
+        setTimeout(() => {
+          // Special handling for dashboard to ensure fresh data
+          if (path === "/dashboard") {
+            // Use router.refresh() before navigation to clear any cached data
+            router.refresh();
+            // Then navigate to dashboard
+            router.push(path);
+          } else {
+            // Normal navigation for other routes
+            router.push(path);
+          }
+          document.body.style.cursor = "default";
+        }, 10);
+      } else if (path === "/dashboard" && pathname === "/dashboard") {
+        // If already on dashboard, just refresh the data
+        router.refresh();
+      }
+    },
+    [pathname, router]
+  );
 
   return (
     <div
       className={`flex flex-col h-screen bg-slate-950 text-light-100 transition-all duration-300 ${
         isCollapsed ? "w-20" : "w-64"
-      } fixed left-0 top-0`}
+      } fixed left-0 top-0 z-50`}
     >
       {/* Logo, Company Name and Collapse Button */}
       <div className="flex items-center justify-between p-4 border-b border-light-400/20">
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 cursor-pointer"
+          onClick={() => handleNavigation("/dashboard")}
+        >
           <Image src="/logo.svg" alt="VoxHire Logo" width={32} height={32} />
           {!isCollapsed && (
             <h2 className="text-xl font-bold text-primary-100">VoxHire</h2>
           )}
         </div>
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={toggleSidebar}
           className="p-1 hover:bg-light-400/10 rounded-full"
         >
           <ChevronLeft
@@ -133,18 +208,18 @@ const Sidebar = () => {
       {/* Navigation Menu */}
       <div className="flex-1 py-4">
         {menuItems.map((item) => (
-          <Link
+          <div
             key={item.path}
-            href={item.path}
-            className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-light-400/10 ${
+            className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-light-400/10 cursor-pointer ${
               pathname === item.path ? "bg-light-400/10 text-primary-200" : ""
             } ${isCollapsed ? "justify-center" : ""}`}
+            onClick={() => handleNavigation(item.path)}
           >
             <span className={pathname === item.path ? "text-primary-200" : ""}>
               {item.icon}
             </span>
             {!isCollapsed && <span>{item.title}</span>}
-          </Link>
+          </div>
         ))}
       </div>
 

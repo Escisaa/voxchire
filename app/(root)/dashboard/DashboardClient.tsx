@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,28 @@ const DashboardClient = ({
   interviews,
   hasPastInterviews,
 }: DashboardClientProps) => {
+  const router = useRouter();
+
+  // Force a refresh when the component mounts or becomes visible
+  useEffect(() => {
+    // When the component becomes visible again (e.g., tab focus)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+
+    // Add visibility change listener
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Force an immediate refresh when dashboard is loaded
+    router.refresh();
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [router]);
+
   return (
     <>
       <section className="card-cta">

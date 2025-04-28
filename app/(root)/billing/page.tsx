@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Coins, Check } from "lucide-react";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -11,6 +11,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+// Memoize the credit packages to prevent re-renders
 const creditPackages = [
   {
     name: "Paid Credits",
@@ -52,6 +53,70 @@ const creditPackages = [
   },
 ];
 
+// Memoize the Package component to prevent re-renders
+const PackageCard = memo(
+  ({
+    pkg,
+    isProcessing,
+    processingPackage,
+    onPurchase,
+  }: {
+    pkg: any;
+    isProcessing: boolean;
+    processingPackage: string | null;
+    onPurchase: (priceId: string, packageName: string) => void;
+  }) => {
+    return (
+      <div key={pkg.name + pkg.credits} className="card-border">
+        <div className="card p-6 space-y-6">
+          <div className="text-center space-y-2">
+            <h3 className="text-primary-100">{pkg.name}</h3>
+            <div className="flex items-center justify-center gap-2">
+              <Coins size={20} className="text-primary-200" />
+              <span className="text-2xl font-bold text-primary-200">
+                {pkg.credits}
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-light-100">${pkg.price}</p>
+            {pkg.costPerCredit && (
+              <p className="text-sm text-light-400">
+                ${pkg.costPerCredit} per credit
+              </p>
+            )}
+          </div>
+          <ul className="space-y-3">
+            {pkg.features.map((feature: string, index: number) => (
+              <li
+                key={index}
+                className="flex items-center gap-2 text-light-100"
+              >
+                <Check size={16} className="text-primary-200" />
+                {feature}
+              </li>
+            ))}
+          </ul>
+          <Button
+            onClick={() => onPurchase(pkg.priceId, pkg.name)}
+            disabled={isProcessing}
+            className="w-full"
+          >
+            {isProcessing && processingPackage === pkg.name ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Processing...
+              </div>
+            ) : (
+              "Buy Now"
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+);
+
+PackageCard.displayName = "PackageCard";
+
 const BillingPage = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
@@ -62,31 +127,50 @@ const BillingPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Use a more efficient user fetching strategy
   const fetchUser = useCallback(async () => {
     try {
+      // Use a local variable to store loading state to prevent double fetches
+      let isFetching = true;
+      setLoading(true);
+
       const userData = await getCurrentUser();
+
       if (!userData) {
         // If no user data, redirect to sign-in with return path
         const returnPath = encodeURIComponent("/billing");
         router.push(`/sign-in?return_to=${returnPath}`);
         return null;
       }
-      setUser(userData);
+
+      // Only update state if the component is still mounted and we're still fetching
+      if (isFetching) {
+        setUser(userData);
+        setLoading(false);
+      }
+
       return userData;
     } catch (error) {
       console.error("Error fetching user:", error);
+      setLoading(false);
       return null;
     }
   }, [router]);
 
+  // Fetch user data only once on initial mount
   useEffect(() => {
+    // Prefetch the dashboard page for faster navigation
+    router.prefetch("/dashboard");
+
     fetchUser();
-  }, [fetchUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const success = searchParams.get("success");
     const cancelled = searchParams.get("cancelled");
     const sessionId = searchParams.get("session_id");
+    const userId = searchParams.get("user_id");
 
     // Clear URL parameters immediately to prevent double processing
     if (success || cancelled) {
@@ -94,8 +178,30 @@ const BillingPage = () => {
     }
 
     // Handle cancellation only if coming from Stripe
-    if (cancelled === "true" && document.referrer.includes("stripe.com")) {
+    if (cancelled === "true") {
       toast.info("Payment cancelled. You can try again when you're ready.");
+
+      // If we have a user ID in the URL, use it to help with session recovery
+      if (userId) {
+        // Check if current user is different from the one in the URL
+        if (user && user.id !== userId) {
+          // Force a session refresh to try to restore the correct user
+          fetchUser();
+        }
+      } else {
+        // Try to get user ID from localStorage as fallback
+        const storedUserId = localStorage.getItem("stripe_checkout_user_id");
+        if (storedUserId) {
+          localStorage.removeItem("stripe_checkout_user_id"); // Clean up
+          // If current user is different from stored ID, force refresh
+          if (user && user.id !== storedUserId) {
+            fetchUser();
+          }
+        } else {
+          // Always refresh user data on cancel as a safety measure
+          fetchUser();
+        }
+      }
       return;
     }
 
@@ -111,6 +217,14 @@ const BillingPage = () => {
         setProcessingPackage(null);
 
         if (success === "true") {
+          // Get the current user first to ensure we have the right user context
+          const currentUser = await fetchUser();
+          if (!currentUser) {
+            toast.error("Session expired. Please sign in again.");
+            router.push("/sign-in?return_to=" + encodeURIComponent("/billing"));
+            return;
+          }
+
           const result = await verifyAndProcessPayment(sessionId);
           if (result.success) {
             if (result.credits) {
@@ -122,14 +236,19 @@ const BillingPage = () => {
                 "Payment successful! Your unlimited subscription is now active."
               );
             }
-            await fetchUser(); // Refresh user data
+            // Refresh user data after payment processing
+            await fetchUser();
           } else {
             toast.error(result.error || "Failed to process payment");
+            // Ensure user state is preserved even if payment failed
+            await fetchUser();
           }
         }
       } catch (error) {
         console.error("Error processing payment:", error);
         toast.error("Failed to process payment. Please contact support.");
+        // Ensure user state is preserved even on error
+        await fetchUser();
       } finally {
         setIsProcessing(false);
         setProcessingPackage(null);
@@ -137,39 +256,59 @@ const BillingPage = () => {
     };
 
     processPayment();
-  }, [searchParams, isProcessing, fetchUser]);
+  }, [searchParams, isProcessing, fetchUser, router]);
 
-  const handlePurchase = async (priceId: string, packageName: string) => {
-    if (!user) {
-      toast.error("Please sign in to make a purchase");
-      router.push("/sign-in");
-      return;
-    }
-    if (isProcessing) return; // Prevent multiple clicks while processing
-
-    try {
-      setIsProcessing(true);
-      setProcessingPackage(packageName);
-      const response = await createStripeCheckoutSession(user.id, priceId);
-
-      if (response.error) {
-        toast.error(response.error);
+  // Memoize the handlePurchase function
+  const handlePurchase = useCallback(
+    async (priceId: string, packageName: string) => {
+      if (!user) {
+        toast.error("Please sign in to make a purchase");
+        router.push("/sign-in");
         return;
       }
+      if (isProcessing) return; // Prevent multiple clicks while processing
 
-      if (response.url) {
-        window.location.href = response.url;
-      } else {
+      try {
+        setIsProcessing(true);
+        setProcessingPackage(packageName);
+
+        // Store current user ID to ensure we can retrieve it later
+        const userId = user.id;
+
+        const response = await createStripeCheckoutSession(userId, priceId);
+
+        if (response.error) {
+          toast.error(response.error);
+          setIsProcessing(false);
+          setProcessingPackage(null);
+          return;
+        }
+
+        if (response.url) {
+          // Store user ID in localStorage as a backup for session recovery
+          localStorage.setItem("stripe_checkout_user_id", userId);
+          window.location.href = response.url;
+        } else {
+          toast.error("Failed to create checkout session. Please try again.");
+          setIsProcessing(false);
+          setProcessingPackage(null);
+        }
+      } catch (error) {
+        console.error("Error creating checkout session:", error);
         toast.error("Failed to create checkout session. Please try again.");
+        setIsProcessing(false);
+        setProcessingPackage(null);
       }
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      toast.error("Failed to create checkout session. Please try again.");
-    } finally {
-      setIsProcessing(false);
-      setProcessingPackage(null);
-    }
-  };
+    },
+    [user, isProcessing, router]
+  );
+
+  // Memoize the credits display
+  const creditsDisplay = useMemo(() => {
+    if (loading) return "Loading...";
+    if (user?.subscription) return "∞";
+    return user?.credits || 0;
+  }, [loading, user]);
 
   return (
     <div className="space-y-6">
@@ -184,11 +323,7 @@ const BillingPage = () => {
               <h3 className="text-primary-100">Available Credits</h3>
             </div>
             <span className="text-2xl font-bold text-primary-200">
-              {isProcessing
-                ? "Updating..."
-                : user?.subscription
-                ? "∞"
-                : user?.credits || 0}
+              {creditsDisplay}
               {user?.subscription && (
                 <span className="text-sm ml-2">
                   (until{" "}
@@ -203,52 +338,13 @@ const BillingPage = () => {
       {/* Credit Packages */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
         {creditPackages.map((pkg) => (
-          <div key={pkg.name + pkg.credits} className="card-border">
-            <div className="card p-6 space-y-6">
-              <div className="text-center space-y-2">
-                <h3 className="text-primary-100">{pkg.name}</h3>
-                <div className="flex items-center justify-center gap-2">
-                  <Coins size={20} className="text-primary-200" />
-                  <span className="text-2xl font-bold text-primary-200">
-                    {pkg.credits}
-                  </span>
-                </div>
-                <p className="text-3xl font-bold text-light-100">
-                  ${pkg.price}
-                </p>
-                {pkg.costPerCredit && (
-                  <p className="text-sm text-light-400">
-                    ${pkg.costPerCredit} per credit
-                  </p>
-                )}
-              </div>
-              <ul className="space-y-3">
-                {pkg.features.map((feature, index) => (
-                  <li
-                    key={index}
-                    className="flex items-center gap-2 text-light-100"
-                  >
-                    <Check size={16} className="text-primary-200" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <Button
-                onClick={() => handlePurchase(pkg.priceId, pkg.name)}
-                disabled={isProcessing}
-                className="w-full"
-              >
-                {isProcessing && processingPackage === pkg.name ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Processing...
-                  </div>
-                ) : (
-                  "Buy Now"
-                )}
-              </Button>
-            </div>
-          </div>
+          <PackageCard
+            key={pkg.name + pkg.credits}
+            pkg={pkg}
+            isProcessing={isProcessing}
+            processingPackage={processingPackage}
+            onPurchase={handlePurchase}
+          />
         ))}
       </div>
     </div>

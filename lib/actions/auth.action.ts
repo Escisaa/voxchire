@@ -6,6 +6,10 @@ import { cookies } from "next/headers";
 // Session duration (1 week)
 const SESSION_DURATION = 60 * 60 * 24 * 7;
 
+// Cache user data with a very short TTL for better performance but frequent refreshes
+let cachedUser: { data: User | null; timestamp: number } | null = null;
+const CACHE_TTL = 2000; // 2 seconds cache - short enough for frequent refreshes
+
 // Set session cookie
 export async function setSessionCookie(idToken: string) {
   const cookieStore = await cookies();
@@ -102,8 +106,13 @@ export async function signOut() {
   cookieStore.delete("session");
 }
 
-// Get current user from session cookie
+// Get current user from session cookie with caching
 export async function getCurrentUser(): Promise<User | null> {
+  // Check if we have a valid cached user
+  if (cachedUser && Date.now() - cachedUser.timestamp < CACHE_TTL) {
+    return cachedUser.data;
+  }
+
   const cookieStore = await cookies();
 
   const sessionCookie = cookieStore.get("session")?.value;
@@ -119,14 +128,24 @@ export async function getCurrentUser(): Promise<User | null> {
       .get();
     if (!userRecord.exists) return null;
 
-    return {
+    // Create user object
+    const userData = {
       ...userRecord.data(),
       id: userRecord.id,
     } as User;
+
+    // Cache the result
+    cachedUser = {
+      data: userData,
+      timestamp: Date.now(),
+    };
+
+    return userData;
   } catch (error) {
     console.log(error);
 
-    // Invalid or expired session
+    // Invalid or expired session - clear cache
+    cachedUser = null;
     return null;
   }
 }
